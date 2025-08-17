@@ -59,7 +59,7 @@ AIna is an artificial conversationalist designed to bring joy, warmth, and depth
 
 ### Standalone Executable
 
-For users who prefer not to work with the source code, a standalone `.exe` file is available for download in the [Releases](https://github.com/your-username/AIna/releases) section of this repository.
+For users who prefer not to work with the source code, a standalone `.exe` file is available for download in the [Releases](https://github.com/mmuramatsu/AIna/releases) section of this repository.
 
 ## Contributing
 
