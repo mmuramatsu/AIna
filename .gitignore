@@ -1,0 +1,18 @@
+# Python virtual environment
+/venv/
+src/aina/__pycache__/
+*.pyc
+
+# Build artifacts
+/build/
+/dist/
+main.spec
+pyinstaller.txt
+
+# Temporary files
+/temp/
+
+# IDE / Editor specific
+.idea/
+.vscode/
+*.swp

@@ -1,0 +1,56 @@
+/* QLineEdit */
+
+QLineEdit[theme="light"] {
+    border: 2px solid #6bd6f5;
+    border-radius: 10px;
+    padding: 5px;
+    background-color: #f0f0f0;
+    color: #333;
+}
+QLineEdit[theme="light"]:focus {
+    border-color: #08b3e5;
+    background-color: #ffffff;
+}
+QLineEdit[theme="light"]:disabled {
+    border-color: #A0A0A0;
+    background-color: #e0e0e0;
+    color: #808080;
+}
+
+/* QPushButton Colored */
+
+QPushButton[theme="light"]#ColorButton {
+    background-color: #6bd6f5;
+    border-radius: 25px;
+    border: 2px solid #ffffff;
+    color: #000;
+}
+QPushButton[theme="light"]#ColorButton:hover {
+    background-color: #08b3e5;
+}
+QPushButton[theme="light"]#ColorButton:pressed {
+    background-color: #0696c0;
+}
+QPushButton[theme="light"]#ColorButton:disabled {
+    background-color: #A0A0A0;
+    border: 2px solid #ffffff;
+}
+
+/* QPushButton Colored */
+
+QPushButton[theme="light"]#ColorlessButton {
+    background-color: #ffffff;
+    border-radius: 15px;
+    border: 2px solid #777777;
+    color: #000;
+}
+QPushButton[theme="light"]#ColorlessButton:hover {
+    background-color: #bdbdbd;
+}
+QPushButton[theme="light"]#ColorlessButton:pressed {
+    background-color: #aeaeae;
+}
+QPushButton[theme="light"]#ColorlessButton:disabled {
+    background-color: #A0A0A0;
+    border: 2px solid #777777;
+}

@@ -1,0 +1,13 @@
+numpy
+speechrecognition
+gtts
+openai
+playsound
+pygame
+pyaudio
+sounddevice
+piglet
+wavio
+PySide6
+pyqtdarktheme
+pyinstaller
