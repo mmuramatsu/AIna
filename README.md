@@ -26,7 +26,7 @@ AIna is an artificial conversationalist designed to bring joy, warmth, and depth
 1.  **Clone the repository:**
 
     ```bash
-    git clone https://github.com/your-username/AIna.git
+    git clone https://github.com/mmuramatsu/AIna.git
     cd AIna
     ```
 
