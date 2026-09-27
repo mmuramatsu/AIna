@@ -1,6 +1,6 @@
 import os
 
-import pygame
+from playsound3 import playsound
 from PySide6.QtCore import QThread, Signal, Slot
 
 
@@ -14,43 +14,35 @@ class SpeakerThread(QThread):
 
     finished_signal = Signal(dict, int)
 
-    def __init__(self) -> None:
+    def __init__(self, base_dir: str | None = None) -> None:
         """
         Initializes the SpeakerThread.
         """
 
         super().__init__()
 
-        self.BASE_DIR = os.environ.get("AINA_BASE_DIR")
-
+        self.BASE_DIR = base_dir or os.environ.get("AINA_BASE_DIR")
+        self._sound = None
         self._should_stop = False
 
     def run(self) -> None:
         """
         Runs the thread logic to load and play an audio on speaker.
 
-        This method load and play an audio file using `pygame.mixer`.
+        This method loads and plays an audio file using `playsound3`.
         Executed when the thread starts.
         """
 
         filename = os.path.join(self.BASE_DIR, "temp", "output.mp3")
 
         try:
-            # Initialize the mixer module
-            pygame.mixer.init()
+            self._sound = playsound(filename, block=False)
 
-            # Load the MP3 file
-            pygame.mixer.music.load(filename)
+            while self._sound.is_alive() and not self._should_stop:
+                self.msleep(50)
 
-            # Play the MP3 file
-            pygame.mixer.music.play()
-
-            # Wait for the music to finish playing
-            while pygame.mixer.music.get_busy() and not self._should_stop:
-                pygame.time.Clock().tick(10)
-
-            pygame.mixer.music.unload()
-            pygame.mixer.quit()
+            if self._should_stop and self._sound is not None:
+                self._sound.stop()
         except Exception as e:
             self.finished_signal.emit({"error": e}, 3)
             return
@@ -68,3 +60,8 @@ class SpeakerThread(QThread):
         """
 
         self._should_stop = True
+        if self._sound is not None:
+            try:
+                self._sound.stop()
+            except Exception:
+                pass

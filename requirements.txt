@@ -2,8 +2,7 @@ numpy
 speechrecognition
 gtts
 openai
-playsound
-pygame
+playsound3
 pyaudio
 sounddevice
 piglet
