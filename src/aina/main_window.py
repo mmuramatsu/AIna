@@ -15,7 +15,6 @@ from PySide6.QtWidgets import (
     QTextEdit,
     QFrame,
     QSizePolicy,
-    QTextEdit,
     QComboBox,
     QCheckBox,
     QStatusBar,
@@ -90,7 +89,7 @@ class MainWindow(QMainWindow):
         os.environ["AINA_BASE_DIR"] = BASE_DIR
 
         mic_path = get_asset_path("mic.png", "icons")
-        image_path = get_asset_path("AIna.png", "images")
+        image_path = get_asset_path("aina.png", "images")
         send_path = get_asset_path("send.png", "icons")
         self.repeat_path = get_asset_path("repeat.png", "icons")
         self.stop_path = get_asset_path("stop.png", "icons")
@@ -220,7 +219,6 @@ class MainWindow(QMainWindow):
         log_frame.setLayout(QVBoxLayout())
         log_frame.layout().addWidget(self.log_text_edit)
         log_frame.setFrameShape(QFrame.StyledPanel)
-        log_frame.setMinimumWidth(200)
         log_frame.setMinimumWidth(400)
         log_frame.setSizePolicy(
             QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Expanding
@@ -276,6 +274,11 @@ class MainWindow(QMainWindow):
 
         self.auto_send = False
         self.AIna = None
+
+        # Thread references
+        self.speech_thread = None
+        self.gpt_thread = None
+        self.speaker_thread = None
 
         # Control variables
         self.is_processing = False
@@ -448,11 +451,11 @@ class MainWindow(QMainWindow):
         self.disable_all_buttons()
         self.input_field.setEnabled(False)
 
-        self.worker_thread = SpeechThread(self.language)
-        self.worker_thread.finished_signal.connect(self.process_speech_finished)
+        self.speech_thread = SpeechThread(self.language)
+        self.speech_thread.finished_signal.connect(self.process_speech_finished)
 
         # Start the worker thread
-        self.worker_thread.start()
+        self.speech_thread.start()
 
     def process_speech_finished(self, message: dict, error_status: int) -> None:
         """
@@ -481,7 +484,7 @@ class MainWindow(QMainWindow):
             self.enable_all_buttons()
             self.input_field.setEnabled(True)
 
-            if self.auto_send == True:
+            if self.auto_send:
                 self.send_message()
 
     def process_message(self, AIna: AIna) -> None:
@@ -501,16 +504,16 @@ class MainWindow(QMainWindow):
         self.log_text_edit.append("Thinking...")
 
         # Connecting the signals to the GPTClient
-        self.worker_thread = GPTClient(AIna)
-        self.worker_thread.finished_signal.connect(self.process_message_finished)
-        self.stop_worker_signal.connect(self.worker_thread.stop)
+        self.gpt_thread = GPTClient(AIna)
+        self.gpt_thread.finished_signal.connect(self.process_message_finished)
+        self.stop_worker_signal.connect(self.gpt_thread.stop)
 
         # Changing the repeat_button icon
         self.repeat_button.set_icon(self.stop_path, 22)
         self.repeat_button.setEnabled(True)
 
         # Start the worker thread
-        self.worker_thread.start()
+        self.gpt_thread.start()
 
     def process_message_finished(self, message: dict, error_status: int) -> None:
         """
@@ -526,6 +529,12 @@ class MainWindow(QMainWindow):
                              user canceled the action).
         """
 
+        # Safely disconnect stop signal to avoid stale connections
+        try:
+            self.stop_worker_signal.disconnect()
+        except RuntimeError:
+            pass
+
         # Canceled by the user
         if error_status == -1:
             # Getting the user's message lenght to remove from the log
@@ -538,7 +547,6 @@ class MainWindow(QMainWindow):
 
             # Reseting the interface
             self.repeat_button.set_icon(self.repeat_path, 16)
-            self.stop_worker_signal.disconnect()
             self.erase_log(message_len)
             self.enable_all_buttons()
             self.is_processing = False
@@ -570,16 +578,16 @@ class MainWindow(QMainWindow):
         """
 
         # Connecting the signals to the SpeakerThread
-        self.worker_thread = SpeakerThread()
-        self.worker_thread.finished_signal.connect(self.play_sound_finished)
-        self.stop_worker_signal.connect(self.worker_thread.stop)
+        self.speaker_thread = SpeakerThread()
+        self.speaker_thread.finished_signal.connect(self.play_sound_finished)
+        self.stop_worker_signal.connect(self.speaker_thread.stop)
 
         # Changing the repeat_button icon
         self.repeat_button.set_icon(self.stop_path, 22)
         self.repeat_button.setEnabled(True)
 
         # Start the worker thread
-        self.worker_thread.start()
+        self.speaker_thread.start()
 
     def play_sound_finished(self, message: dict, error_status: int) -> None:
         """
@@ -594,6 +602,12 @@ class MainWindow(QMainWindow):
             error_status (int): The error number.
         """
 
+        # Safely disconnect stop signal to avoid stale connections
+        try:
+            self.stop_worker_signal.disconnect()
+        except RuntimeError:
+            pass
+
         if error_status != 0:
             # Showing the error to the user
             ErrorHandler.handle_exception(message, error_status)
@@ -605,16 +619,19 @@ class MainWindow(QMainWindow):
     def enable_all_buttons(self) -> None:
         """
         Enables all buttons in the interface.
+        Only enables interaction buttons if the model has been initialized.
         """
 
-        self.record_button.setEnabled(True)
         self.initialize_button.setEnabled(True)
 
-        # If there is text in the input_field, enable it
-        if self.input_field.text() != "":
-            self.send_button.setEnabled(True)
+        # Only enable interaction buttons if model is initialized
+        if self.AIna is not None:
+            self.record_button.setEnabled(True)
+            self.repeat_button.setEnabled(True)
 
-        self.repeat_button.setEnabled(True)
+            # If there is text in the input_field, enable it
+            if self.input_field.text() != "":
+                self.send_button.setEnabled(True)
 
     def disable_all_buttons(self) -> None:
         """
@@ -630,6 +647,9 @@ class MainWindow(QMainWindow):
         """
         Sends a message to the model to be processed.
         """
+
+        if self.AIna is None:
+            return
 
         message = self.input_field.text()
         self.input_field.setText("")
@@ -683,7 +703,7 @@ class MainWindow(QMainWindow):
         """
 
         # Enable the button only if there's a model loaded and is not processing something
-        if self.AIna != None and not self.is_processing:
+        if self.AIna is not None and not self.is_processing:
             self.send_button.setEnabled(bool(text.strip()))
 
     def handle_repeat_button(self) -> None:
@@ -692,7 +712,12 @@ class MainWindow(QMainWindow):
         audio and stopping the worker thread from executing.
         """
 
-        if not self.worker_thread.isRunning():
+        is_running = (
+            (self.gpt_thread is not None and self.gpt_thread.isRunning())
+            or (self.speaker_thread is not None and self.speaker_thread.isRunning())
+        )
+
+        if not is_running:
             self.disable_all_buttons()
             self.play_sound()
         else:
@@ -751,13 +776,13 @@ class MainWindow(QMainWindow):
         save_config(self.config, CONFIG_PATH)
 
 
-def get_asset_path(filename: str, type: str) -> str:
+def get_asset_path(filename: str, asset_type: str) -> str:
     """
     Get correct path for assets in both development and frozen (exe) mode.
 
     Args:
         filename (str): Name of the file to be loaded.
-        type (str): The type of the file, it varies between "icons", "images",
+        asset_type (str): The type of the file, it varies between "icons", "images",
                  "prompts" and "styles".
 
     Returns:
@@ -765,8 +790,8 @@ def get_asset_path(filename: str, type: str) -> str:
     """
 
     if getattr(sys, "frozen", False):  # Running as .exe
-        base_path = os.path.join(sys._MEIPASS, "assets", type)
+        base_path = os.path.join(sys._MEIPASS, "assets", asset_type)
     else:
-        base_path = os.path.join(BASE_DIR, "assets", type)
+        base_path = os.path.join(BASE_DIR, "assets", asset_type)
 
     return os.path.join(base_path, filename)
