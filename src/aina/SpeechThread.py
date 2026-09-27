@@ -34,7 +34,7 @@ class SpeechThread(QThread):
         try:
             text = SpeechProcessor.speech_to_text(self.language)
         except Exception as e:
-            self.finished_signal.emit({"error": text}, 4)
+            self.finished_signal.emit({"error": e}, 4)
             return
 
         # Emit the finished signal
