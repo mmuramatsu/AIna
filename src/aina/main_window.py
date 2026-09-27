@@ -32,6 +32,7 @@ from .SpeakerThread import SpeakerThread
 from .SpeechThread import SpeechThread
 from .startup import get_config_path, save_config, load_config
 from .StylishLineEdit import StylishLineEdit
+from .AspectImageLabel import AspectImageLabel
 
 
 # Get the absolute path of the directory where the script is located
@@ -82,7 +83,8 @@ class MainWindow(QMainWindow):
         """
 
         self.setWindowTitle("AIna - Beta")
-        self.setGeometry(100, 100, 1000, 600)
+        self.resize(1150, 680)
+        self.setMinimumSize(950, 580)
 
         self.language_dict = {"English": "en-US", "日本語": "ja"}
 
@@ -150,17 +152,13 @@ class MainWindow(QMainWindow):
         config_frame = QFrame()
         config_frame.setLayout(config_layout)
         config_frame.setFrameShape(QFrame.StyledPanel)
-        config_frame.setMinimumWidth(200)
-        # config_frame.setMaximumWidth(150)
+        config_frame.setFixedWidth(220)
         config_frame.setSizePolicy(
             QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Expanding
         )
 
         # Center Panel: Image and Button
-        image_label = QLabel()
-        pixmap = QPixmap(image_path)  # Replace with your image path
-        image_label.setPixmap(pixmap)
-        image_label.setScaledContents(True)
+        self.image_label = AspectImageLabel(image_path)
 
         # Create the animated microphone button
         self.record_button = AnimatedButton(mic_path)
@@ -198,7 +196,7 @@ class MainWindow(QMainWindow):
         input_layout.addWidget(self.repeat_button)
 
         center_layout = QVBoxLayout()
-        center_layout.addWidget(image_label)
+        center_layout.addWidget(self.image_label)
         center_layout.addWidget(
             self.record_button, alignment=Qt.AlignmentFlag.AlignCenter
         )
@@ -206,9 +204,9 @@ class MainWindow(QMainWindow):
         center_frame = QFrame()
         center_frame.setLayout(center_layout)
         center_frame.setFrameShape(QFrame.StyledPanel)
-        # center_frame.setMinimumWidth(200)
+        center_frame.setMinimumWidth(400)
         center_frame.setSizePolicy(
-            QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Expanding
+            QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Expanding
         )
 
         # Right Panel: Log
@@ -219,14 +217,14 @@ class MainWindow(QMainWindow):
         log_frame.setLayout(QVBoxLayout())
         log_frame.layout().addWidget(self.log_text_edit)
         log_frame.setFrameShape(QFrame.StyledPanel)
-        log_frame.setMinimumWidth(400)
+        log_frame.setMinimumWidth(350)
         log_frame.setSizePolicy(
-            QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Expanding
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding
         )
 
         # Add panels to main layout
-        main_layout.addWidget(config_frame, 1)
-        main_layout.addWidget(center_frame, 2)
+        main_layout.addWidget(config_frame, 0)
+        main_layout.addWidget(center_frame, 0)
         main_layout.addWidget(log_frame, 1)
 
         central_widget.setLayout(main_layout)
