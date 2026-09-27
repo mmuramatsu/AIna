@@ -50,6 +50,7 @@ class SpeakerThread(QThread):
                 pygame.time.Clock().tick(10)
 
             pygame.mixer.music.unload()
+            pygame.mixer.quit()
         except Exception as e:
             self.finished_signal.emit({"error": e}, 3)
             return
