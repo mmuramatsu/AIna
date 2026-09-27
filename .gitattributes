@@ -1,1 +1,16 @@
-* text=auto
+# Auto detect text files and normalize line endings (LF in repo, native on checkout)
+* text=auto eol=lf
+
+# Force specific file types
+*.py text eol=lf
+*.md text eol=lf
+*.txt text eol=lf
+*.json text eol=lf
+*.qss text eol=lf
+*.spec text eol=lf
+
+# Binary files
+*.png binary
+*.ico binary
+*.mp3 binary
+*.wav binary
