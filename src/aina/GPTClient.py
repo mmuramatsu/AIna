@@ -39,6 +39,9 @@ class GPTClient(QThread):
 
         new_message = {"role": "assistant", "content": ""}
 
+        # Trim history to prevent hitting token limits on long conversations
+        self.AIna.trim_history()
+
         try:
             completion = self.AIna.client.chat.completions.create(
                 model="model-identifier",
@@ -64,7 +67,7 @@ class GPTClient(QThread):
         if not self._should_stop:
             try:
                 SpeechProcessor.text_to_speech(
-                    new_message["content"], self.AIna.language
+                    new_message["content"], self.AIna.language.split("-")[0]
                 )
             except Exception as e:
                 # Handles some error during text to speech process.
