@@ -10,6 +10,10 @@ class AIna:
     through the GPT API.
     """
 
+    # Maximum number of conversation messages to keep (excluding system prompt).
+    # This prevents unbounded history growth that would hit token limits.
+    MAX_HISTORY_MESSAGES = 50
+
     def __init__(
         self,
         language: str = "en-US",
@@ -55,3 +59,17 @@ class AIna:
         self.client = OpenAI(
             base_url="http://localhost:1234/v1", api_key="lm-studio"
         )
+
+    def trim_history(self) -> None:
+        """
+        Trims conversation history to prevent unbounded growth.
+
+        Keeps the system prompt (first message) and the most recent messages
+        up to MAX_HISTORY_MESSAGES. This prevents hitting token limits on
+        long conversations.
+        """
+
+        # +1 accounts for the system prompt at index 0
+        if len(self.history) > self.MAX_HISTORY_MESSAGES + 1:
+            system_prompt = self.history[0]
+            self.history = [system_prompt] + self.history[-(self.MAX_HISTORY_MESSAGES):]
