@@ -36,7 +36,7 @@ QPushButton[theme="light"]#ColorButton:disabled {
     border: 2px solid #ffffff;
 }
 
-/* QPushButton Colored */
+/* QPushButton Colorless */
 
 QPushButton[theme="light"]#ColorlessButton {
     background-color: #ffffff;
