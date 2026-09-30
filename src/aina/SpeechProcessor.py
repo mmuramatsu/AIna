@@ -1,6 +1,11 @@
 import os
+import warnings
 
 from gtts import gTTS
+
+# Suppress unauthenticated Hugging Face Hub download notices
+warnings.filterwarnings("ignore", message=".*unauthenticated requests to the HF Hub.*")
+os.environ.setdefault("HF_HUB_DISABLE_SYMLINKS_WARNING", "1")
 
 
 class SpeechProcessor:
