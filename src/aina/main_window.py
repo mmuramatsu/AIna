@@ -308,6 +308,7 @@ class MainWindow(QMainWindow):
         # Control variables
         self.is_processing = False
         self.log_add_flag = False
+        self.last_user_message = None
 
         self.current_theme = None
         self.toggle_theme(self.config["theme"])
@@ -599,14 +600,38 @@ class MainWindow(QMainWindow):
 
         # If some error occur
         elif error_status != 0:
-            # Showing the error to the user
-            ErrorHandler.handle_exception(message, error_status)
-
-            # Revert GUI changes
+            # Revert GUI changes and erase "Thinking..."
             self.erase_log()
+            self.repeat_button.set_icon(self.repeat_path, 16)
             self.enable_all_buttons()
             self.is_processing = False
+            self.change_status("Idle")
+
+            # Roll back unanswered user message from history to prevent state corruption
+            if (
+                self.log_add_flag
+                and self.AIna
+                and self.AIna.history
+                and self.AIna.history[-1]["role"] == "user"
+            ):
+                del self.AIna.history[-1]
+
+            # Ask user if they wish to retry
+            should_retry = ErrorHandler.handle_retryable_exception(
+                message, error_status, self
+            )
+
+            if should_retry:
+                self.resend_last_message()
+                return
+            else:
+                # Restore the failed message to input field so user does not lose it
+                if self.last_user_message and not self.input_field.text():
+                    self.input_field.setText(self.last_user_message)
+                    self.input_field.selectAll()
+
         else:
+            self.last_user_message = None  # Clear on success
             if message["content"] != "":
                 self.AIna.history.append(message)
 
@@ -697,13 +722,38 @@ class MainWindow(QMainWindow):
         if self.AIna is None:
             return
 
-        message = self.input_field.text()
+        message = self.input_field.text().strip()
+        if not message:
+            return
+
+        self.last_user_message = message
         self.input_field.setText("")
 
         self.AIna.history.append({"role": "user", "content": message})
         self.log_text_edit.append(f"You: {message}\n")
         self.log_add_flag = True
 
+        self.process_message(self.AIna)
+
+    def resend_last_message(self) -> None:
+        """
+        Re-sends the last failed user message to the model.
+        """
+
+        if self.AIna is None or not self.last_user_message:
+            return
+
+        # Ensure user message is in history
+        if (
+            not self.AIna.history
+            or self.AIna.history[-1]["role"] != "user"
+            or self.AIna.history[-1]["content"] != self.last_user_message
+        ):
+            self.AIna.history.append(
+                {"role": "user", "content": self.last_user_message}
+            )
+
+        self.log_add_flag = True
         self.process_message(self.AIna)
 
     def erase_log(self, lenght: int = 0) -> None:
