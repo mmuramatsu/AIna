@@ -21,7 +21,7 @@ from PySide6.QtWidgets import (
     QMessageBox,
 )
 from PySide6.QtGui import QPixmap, QTextCursor, QAction, QKeyEvent
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Qt, Signal, SIGNAL
 import qdarktheme
 import wavio
 
@@ -582,7 +582,8 @@ class MainWindow(QMainWindow):
 
         # Safely disconnect stop signal to avoid stale connections
         try:
-            self.stop_worker_signal.disconnect()
+            if self.receivers(SIGNAL("stop_worker_signal()")) > 0:
+                self.stop_worker_signal.disconnect()
         except RuntimeError:
             pass
 
@@ -676,7 +677,8 @@ class MainWindow(QMainWindow):
 
         # Safely disconnect stop signal to avoid stale connections
         try:
-            self.stop_worker_signal.disconnect()
+            if self.receivers(SIGNAL("stop_worker_signal()")) > 0:
+                self.stop_worker_signal.disconnect()
         except RuntimeError:
             pass
 
