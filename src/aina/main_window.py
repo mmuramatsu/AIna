@@ -145,7 +145,7 @@ class MainWindow(QMainWindow):
         # Create the Initialize button
         self.initialize_button = QPushButton("Initialize AIna")
         self.initialize_button.pressed.connect(self.initialize_model)
-        self.initialize_button.setToolTip("Initialize AIna's model")
+        self.initialize_button.setToolTip("Initialize AIna's profile")
         config_layout.addRow(self.initialize_button)
 
         # Create the configuration frame and set its properties
@@ -253,7 +253,7 @@ class MainWindow(QMainWindow):
 
         self.status_message = QLabel()
         self.status_message.setText(
-            'Model: <b>None</b> | Status: <span style="color:red;"><b>Not Loaded</b></span>'
+            'Profile: <b>None</b> | Status: <span style="color:red;"><b>Not Loaded</b></span>'
         )
         status_bar.addPermanentWidget(self.status_message)
 
@@ -348,8 +348,8 @@ class MainWindow(QMainWindow):
 
     def initialize_model(self) -> None:
         """
-        Initialize the AIna model based on the settings. Any errors that occur
-        will be handled and displayed to the user.
+        Initialize the AIna profile based on the selected language and level
+        settings. Any errors that occur will be handled and displayed to the user.
         """
 
         self.language = self.language_dict[
@@ -622,7 +622,7 @@ class MainWindow(QMainWindow):
 
         self.initialize_button.setEnabled(True)
 
-        # Only enable interaction buttons if model is initialized
+        # Only enable interaction buttons if profile is initialized
         if self.AIna is not None:
             self.record_button.setEnabled(True)
             self.repeat_button.setEnabled(True)
@@ -700,7 +700,7 @@ class MainWindow(QMainWindow):
             text (str): text in the EditLine.
         """
 
-        # Enable the button only if there's a model loaded and is not processing something
+        # Enable the button only if there's a profile loaded and is not processing something
         if self.AIna is not None and not self.is_processing:
             self.send_button.setEnabled(bool(text.strip()))
 
@@ -742,20 +742,20 @@ class MainWindow(QMainWindow):
 
     def change_status(self, status: str) -> None:
         """
-        Change the status of the model.
+        Change the status of the profile.
 
         Args:
-            status (str): Represents the state of the model. It varies between
+            status (str): Represents the state of the profile. It varies between
                        "Idle" and "Busy".
         """
 
         if status == "Busy":
             self.status_message.setText(
-                f"Model: <b>AIna-{self.language}-{self.language_level}</b> | Status: <b>Busy</b>"
+                f"Profile: <b>AIna-{self.language}-{self.language_level}</b> | Status: <b>Busy</b>"
             )
         else:
             self.status_message.setText(
-                f"Model: <b>AIna-{self.language}-{self.language_level}</b> | Status: <b>Idle</b>"
+                f"Profile: <b>AIna-{self.language}-{self.language_level}</b> | Status: <b>Idle</b>"
             )
 
     def save_config(self) -> None:

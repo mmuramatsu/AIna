@@ -42,8 +42,8 @@ class ErrorHandler:
                 'issue.\n\nDetails: "'
             ),
             5: (
-                "Model initialization failed. This may be due to missing "
-                "dependencies incorrect API credentials, or a configuration "
+                "Profile initialization failed. This may be due to missing "
+                "dependencies, incorrect API credentials, or a configuration "
                 'issue. Please check the settings and try again.\n\nDetails: "'
             ),
         }
