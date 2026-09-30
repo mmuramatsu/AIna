@@ -19,6 +19,7 @@ class AIna:
         language: str = "en-US",
         language_level: str = "Basic",
         prompt_path: str = None,
+        provider_config: dict | None = None,
     ) -> None:
         """
         Initializes the GPT model by loading the prompt, setting up conversation history,
@@ -31,6 +32,7 @@ class AIna:
                                             (e.g., 'Basic', 'Advanced').
                                             Defaults to 'Basic'.
             prompt_path (str, optional): Path to a custom prompt file. If None, a default prompt is used.
+            provider_config (dict, optional): Provider settings containing base_url, api_key, and model.
         """
 
         self.language = language
@@ -55,9 +57,15 @@ class AIna:
             {"role": "user", "content": self.init_messages[language][1]},
         ]
 
-        # Point to the local server
+        # Configure provider credentials and model
+        config = provider_config or {}
+        base_url = config.get("base_url") or "http://localhost:1234/v1"
+        api_key = config.get("api_key") or "none"
+        self.model_name = config.get("model") or "model-identifier"
+
         self.client = OpenAI(
-            base_url="http://localhost:1234/v1", api_key="lm-studio"
+            base_url=base_url if base_url else None,
+            api_key=api_key if api_key else "none",
         )
 
     def trim_history(self) -> None:

@@ -43,8 +43,9 @@ class GPTClient(QThread):
         self.AIna.trim_history()
 
         try:
+            model_name = getattr(self.AIna, "model_name", "model-identifier") or "model-identifier"
             completion = self.AIna.client.chat.completions.create(
-                model="model-identifier",
+                model=model_name,
                 messages=self.AIna.history,
                 temperature=1.2,
                 stream=True,
