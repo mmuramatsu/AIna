@@ -727,6 +727,7 @@ class MainWindow(QMainWindow):
             return
 
         self.last_user_message = message
+        self.input_field.add_to_history(message)
         self.input_field.setText("")
 
         self.AIna.history.append({"role": "user", "content": message})
