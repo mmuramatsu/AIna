@@ -1,14 +1,12 @@
 numpy
-speechrecognition
 gtts
 openai
 playsound3
-pyaudio
 sounddevice
-piglet
 wavio
 PySide6
 pyqtdarktheme
 pyinstaller
 pytest
 pytest-qt
+faster-whisper

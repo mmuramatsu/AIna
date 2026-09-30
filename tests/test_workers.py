@@ -29,15 +29,16 @@ def test_speech_processor_speech_to_text(tmp_path: Path):
     wav_file = audio_dir / "input.wav"
     wav_file.write_bytes(b"dummy_wav_data")
 
-    with patch("src.aina.SpeechProcessor.sr.Recognizer") as mock_rec_cls, \
-         patch("src.aina.SpeechProcessor.sr.AudioFile") as mock_audio_cls:
-        mock_rec = mock_rec_cls.return_value
-        mock_rec.record.return_value = MagicMock()
-        mock_rec.recognize_google.return_value = "transcribed voice"
+    mock_segment = MagicMock()
+    mock_segment.text = "transcribed voice"
 
+    mock_model = MagicMock()
+    mock_model.transcribe.return_value = ([mock_segment], None)
+
+    with patch.object(SpeechProcessor, "get_whisper_model", return_value=mock_model):
         result = SpeechProcessor.speech_to_text("en-US", base_dir=str(tmp_path))
         assert result == "transcribed voice"
-        mock_rec.recognize_google.assert_called_once()
+        mock_model.transcribe.assert_called_once()
 
 
 def test_speech_thread_success(qtbot, tmp_path: Path):
