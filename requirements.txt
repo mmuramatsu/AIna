@@ -10,3 +10,5 @@ wavio
 PySide6
 pyqtdarktheme
 pyinstaller
+pytest
+pytest-qt
