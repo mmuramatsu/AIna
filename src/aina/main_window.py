@@ -584,24 +584,21 @@ class MainWindow(QMainWindow):
 
         # Canceled by the user
         if error_status == -1:
-            # Getting the user's message lenght to remove from the log
-            if self.log_add_flag:
-                message_len = len(f"You: {self.AIna.history[-1]["content"]}\n")
-            else:
-                message_len = len("")
+            if self.AIna and self.AIna.history and self.AIna.history[-1]["role"] == "user":
+                del self.AIna.history[-1]
 
-            del self.AIna.history[-1]
-
-            # Reseting the interface
+            # Resetting the interface
             self.repeat_button.set_icon(self.repeat_path, 16)
-            self.erase_log(message_len)
+            self.erase_log()
+            self.erase_last_user_message()
             self.enable_all_buttons()
             self.is_processing = False
 
         # If some error occur
         elif error_status != 0:
-            # Revert GUI changes and erase "Thinking..."
+            # Revert GUI changes and erase "Thinking..." and unsent message from log
             self.erase_log()
+            self.erase_last_user_message()
             self.repeat_button.set_icon(self.repeat_path, 16)
             self.enable_all_buttons()
             self.is_processing = False
@@ -754,8 +751,27 @@ class MainWindow(QMainWindow):
                 {"role": "user", "content": self.last_user_message}
             )
 
+        self.log_text_edit.append(f"You: {self.last_user_message}\n")
         self.log_add_flag = True
         self.process_message(self.AIna)
+
+    def erase_last_user_message(self) -> None:
+        """
+        Removes the last 'You: <message>' entry from the conversation log UI.
+        """
+
+        if not self.last_user_message:
+            return
+
+        target_text = f"You: {self.last_user_message}"
+        plain_text = self.log_text_edit.toPlainText().rstrip()
+        if plain_text.endswith(target_text):
+            idx = plain_text.rfind(target_text)
+            cursor = self.log_text_edit.textCursor()
+            cursor.movePosition(QTextCursor.End)
+            cursor.setPosition(idx, QTextCursor.KeepAnchor)
+            cursor.removeSelectedText()
+            self.log_text_edit.setFontPointSize(16)
 
     def erase_log(self, lenght: int = 0) -> None:
         """
