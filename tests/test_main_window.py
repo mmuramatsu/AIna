@@ -8,7 +8,7 @@ from src.aina.AIna import AIna
 
 def test_main_window_init(qtbot, tmp_config):
     cfg, cfg_file = tmp_config
-    win = MainWindow(cfg)
+    win = MainWindow(cfg, config_path=cfg_file)
     qtbot.addWidget(win)
 
     assert win.initialize_button is not None
@@ -21,7 +21,7 @@ def test_main_window_init(qtbot, tmp_config):
 
 def test_main_window_send_message_dispatches(qtbot, tmp_config, project_root: Path):
     cfg, cfg_file = tmp_config
-    win = MainWindow(cfg)
+    win = MainWindow(cfg, config_path=cfg_file)
     qtbot.addWidget(win)
 
     # Initialize mock profile
@@ -41,7 +41,7 @@ def test_main_window_send_message_dispatches(qtbot, tmp_config, project_root: Pa
 
 def test_main_window_error_rollback_and_restore_on_cancel(qtbot, tmp_config, project_root: Path):
     cfg, cfg_file = tmp_config
-    win = MainWindow(cfg)
+    win = MainWindow(cfg, config_path=cfg_file)
     qtbot.addWidget(win)
 
     prompt_path = project_root / "assets" / "prompts" / "AIna-prompt-en-US-Basic.txt"
@@ -69,7 +69,7 @@ def test_main_window_error_rollback_and_restore_on_cancel(qtbot, tmp_config, pro
 
 def test_main_window_error_retry_flow(qtbot, tmp_config, project_root: Path):
     cfg, cfg_file = tmp_config
-    win = MainWindow(cfg)
+    win = MainWindow(cfg, config_path=cfg_file)
     qtbot.addWidget(win)
 
     prompt_path = project_root / "assets" / "prompts" / "AIna-prompt-en-US-Basic.txt"
@@ -88,7 +88,7 @@ def test_main_window_error_retry_flow(qtbot, tmp_config, project_root: Path):
 
 def test_main_window_provider_change_updates_status_bar(qtbot, tmp_config):
     cfg, cfg_file = tmp_config
-    win = MainWindow(cfg)
+    win = MainWindow(cfg, config_path=cfg_file)
     qtbot.addWidget(win)
 
     assert "LM Studio (Local)" in win.status_message.text()
@@ -97,3 +97,23 @@ def test_main_window_provider_change_updates_status_bar(qtbot, tmp_config):
     win.provider_combo_box.setCurrentText("Ollama (Local)")
     assert "Ollama (Local)" in win.status_message.text()
     assert win.config["active_provider"] == "Ollama (Local)"
+
+
+def test_main_window_config_isolation(qtbot, tmp_path: Path):
+    """Verify that MainWindow saves into its injected config_path and does not touch global CONFIG_PATH."""
+    from src.aina.startup import load_config, DEFAULT_CONFIG
+    custom_cfg_file = tmp_path / "custom_appdata" / "config.json"
+    custom_cfg_file.parent.mkdir(parents=True, exist_ok=True)
+
+    cfg = dict(DEFAULT_CONFIG)
+    cfg["theme"] = "dark"
+
+    win = MainWindow(cfg, config_path=custom_cfg_file)
+    qtbot.addWidget(win)
+
+    win.provider_combo_box.setCurrentText("OpenAI (Cloud)")
+    win.save_config()
+
+    saved = load_config(custom_cfg_file)
+    assert saved["active_provider"] == "OpenAI (Cloud)"
+    assert win.config_path == custom_cfg_file

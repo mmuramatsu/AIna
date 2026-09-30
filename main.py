@@ -6,6 +6,6 @@ if __name__ == "__main__":
     app = QApplication(sys.argv)
     config_path = get_config_path("AIna")
     config = load_config(config_path)
-    window = MainWindow(config)
+    window = MainWindow(config, config_path=config_path)
     window.show()
     sys.exit(app.exec())

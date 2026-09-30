@@ -1,5 +1,6 @@
 import os
 import sys
+import tempfile
 from pathlib import Path
 from unittest.mock import MagicMock
 import pytest
@@ -13,7 +14,31 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 os.environ["AINA_BASE_DIR"] = str(PROJECT_ROOT)
 
+# Isolate APPDATA immediately so module-level imports never touch user APPDATA
+_SESSION_APPDATA_SANDBOX = Path(tempfile.mkdtemp(prefix="aina_test_appdata_"))
+os.environ["APPDATA"] = str(_SESSION_APPDATA_SANDBOX)
+
 from src.aina.startup import DEFAULT_CONFIG, save_config
+
+
+@pytest.fixture(autouse=True)
+def isolate_app_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    """
+    Autouse fixture ensuring every test runs with an isolated, temporary APPDATA directory
+    and that MainWindow.CONFIG_PATH never points to the user's real configuration file.
+    """
+    fake_appdata = tmp_path / "fake_appdata"
+    fake_appdata.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setenv("APPDATA", str(fake_appdata))
+
+    fake_config = fake_appdata / "AIna" / "config.json"
+    fake_config.parent.mkdir(parents=True, exist_ok=True)
+    save_config(dict(DEFAULT_CONFIG), fake_config)
+
+    import src.aina.main_window as mw
+    monkeypatch.setattr(mw, "CONFIG_PATH", fake_config)
+
+    yield fake_config
 
 
 @pytest.fixture

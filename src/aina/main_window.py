@@ -1,5 +1,6 @@
 import os
 import sys
+from pathlib import Path
 
 import numpy as np
 import sounddevice as sd
@@ -58,17 +59,19 @@ class MainWindow(QMainWindow):
     # Slot to connect to the thread to send signals from this class to the worker thread
     stop_worker_signal = Signal()
 
-    def __init__(self, config: dict):
+    def __init__(self, config: dict, config_path: Path | None = None):
         """
         Initialize the UI class
 
         Args:
-            config (dict): _description_
+            config (dict): Application configuration dictionary.
+            config_path (Path, optional): Path to the configuration JSON file.
         """
 
         super().__init__()
 
         self.config = config
+        self.config_path = Path(config_path) if config_path is not None else CONFIG_PATH
         self.init_ui()
 
         # Creates "temp" folder if not exists.
@@ -315,7 +318,7 @@ class MainWindow(QMainWindow):
         self.last_user_message = None
 
         self.current_theme = None
-        self.toggle_theme(self.config["theme"])
+        self.toggle_theme(self.config["theme"], save=False)
 
     def apply_theme(self, theme_name: str) -> None:
         """
@@ -338,7 +341,7 @@ class MainWindow(QMainWindow):
         # Combine and apply the stylesheets
         self.setStyleSheet(base_stylesheet + custom_stylesheet)
 
-    def toggle_theme(self, theme_name: str) -> None:
+    def toggle_theme(self, theme_name: str, save: bool = True) -> None:
         """
         Toggles the application theme and updates all GUI widgets.
 
@@ -348,6 +351,7 @@ class MainWindow(QMainWindow):
 
         Args:
             theme_name (str): The name of the theme to apply ('light' or 'dark').
+            save (bool, optional): Whether to persist the theme change to disk. Defaults to True.
         """
 
         if theme_name != self.current_theme:
@@ -376,7 +380,8 @@ class MainWindow(QMainWindow):
 
             self.apply_theme(theme_name)
 
-            self.save_config()
+            if save:
+                self.save_config()
 
     def initialize_model(self) -> None:
         """
@@ -897,7 +902,7 @@ class MainWindow(QMainWindow):
         """
         Opens the dialog to configure LLM providers, credentials, and models.
         """
-        dialog = ProviderSettingsDialog(self.config, CONFIG_PATH, self)
+        dialog = ProviderSettingsDialog(self.config, self.config_path, self)
         if dialog.exec():
             active = self.config.get("active_provider", "LM Studio (Local)")
             idx = self.provider_combo_box.findText(active, Qt.MatchFixedString)
@@ -919,7 +924,7 @@ class MainWindow(QMainWindow):
         self.config["auto_send"] = self.auto_send_checkbox.isChecked()
         self.config["active_provider"] = self.provider_combo_box.currentText()
 
-        save_config(self.config, CONFIG_PATH)
+        save_config(self.config, self.config_path)
 
 
 def get_asset_path(filename: str, asset_type: str) -> str:
