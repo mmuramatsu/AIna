@@ -297,7 +297,11 @@ class MainWindow(QMainWindow):
         self.recording = False
         self.frames = []
 
-        self.auto_send = False
+        self.language = self.language_dict.get(
+            self.config.get("language", "English"), "en-US"
+        )
+        self.language_level = self.config.get("language_level", "Basic")
+        self.auto_send = self.config.get("auto_send", False)
         self.AIna = None
 
         # Thread references

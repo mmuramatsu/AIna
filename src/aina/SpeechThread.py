@@ -13,17 +13,19 @@ class SpeechThread(QThread):
 
     finished_signal = Signal(dict, int)
 
-    def __init__(self, language: str) -> None:
+    def __init__(self, language: str, base_dir: str | None = None) -> None:
         """
         Initializes the SpeechThread.
 
         Args:
             language (str): The language code for the speech recognition
                 (e.g., "en-US" for English, "ja" for Japanese).
+            base_dir (str, optional): Base directory for audio files.
         """
 
         super().__init__()
         self.language = language
+        self.base_dir = base_dir
 
     def run(self) -> None:
         """
@@ -32,7 +34,7 @@ class SpeechThread(QThread):
         """
 
         try:
-            text = SpeechProcessor.speech_to_text(self.language)
+            text = SpeechProcessor.speech_to_text(self.language, base_dir=self.base_dir)
         except Exception as e:
             self.finished_signal.emit({"error": e}, 4)
             return

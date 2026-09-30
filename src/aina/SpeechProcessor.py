@@ -65,5 +65,7 @@ class SpeechProcessor:
         if base_dir is None:
             raise ValueError("base_dir not provided and AINA_BASE_DIR env var not set")
         filename = os.path.join(base_dir, "temp", "output.mp3")
+        os.makedirs(os.path.dirname(filename), exist_ok=True)
 
         speech.save(filename)
+        return filename
