@@ -18,6 +18,7 @@ from PySide6.QtWidgets import (
     QComboBox,
     QCheckBox,
     QStatusBar,
+    QMessageBox,
 )
 from PySide6.QtGui import QPixmap, QTextCursor, QAction, QKeyEvent
 from PySide6.QtCore import Qt, Signal
@@ -33,6 +34,7 @@ from .SpeechThread import SpeechThread
 from .startup import get_config_path, save_config, load_config
 from .StylishLineEdit import StylishLineEdit
 from .AspectImageLabel import AspectImageLabel
+from .ProviderSettingsDialog import ProviderSettingsDialog
 
 
 # Get the absolute path of the directory where the script is located
@@ -133,6 +135,24 @@ class MainWindow(QMainWindow):
 
         # Add the QComboBox to the form layout with a label
         config_layout.addRow("Language level:", self.language_level_combo_box)
+
+        # Provider selection
+        self.provider_combo_box = QComboBox()
+        providers = list(self.config.get("providers", {}).keys())
+        self.provider_combo_box.addItems(providers)
+        self.provider_combo_box.setToolTip("Choose the LLM provider for AIna")
+        active_provider = self.config.get("active_provider", "LM Studio (Local)")
+        idx = self.provider_combo_box.findText(active_provider, Qt.MatchFixedString)
+        if idx >= 0:
+            self.provider_combo_box.setCurrentIndex(idx)
+        self.provider_combo_box.currentTextChanged.connect(self._on_provider_changed)
+        config_layout.addRow("Provider:", self.provider_combo_box)
+
+        # Provider configure button
+        self.configure_provider_button = QPushButton("Configure Provider...")
+        self.configure_provider_button.setToolTip("Configure LLM provider settings and API keys")
+        self.configure_provider_button.clicked.connect(self.open_provider_settings)
+        config_layout.addRow(self.configure_provider_button)
 
         # Create the Auto-send checkbox
         self.auto_send_checkbox = QCheckBox("Auto-send")
@@ -247,13 +267,20 @@ class MainWindow(QMainWindow):
         view_menu.addAction(light_theme_action)
         view_menu.addAction(dark_theme_action)
 
+        # Add "Settings" menu
+        settings_menu = menu_bar.addMenu("Settings")
+        provider_settings_action = QAction("LLM Providers...", self)
+        provider_settings_action.triggered.connect(self.open_provider_settings)
+        settings_menu.addAction(provider_settings_action)
+
         # Status bar
         status_bar = QStatusBar()
         self.setStatusBar(status_bar)
 
         self.status_message = QLabel()
+        active_provider = self.config.get("active_provider", "None")
         self.status_message.setText(
-            'Profile: <b>None</b> | Status: <span style="color:red;"><b>Not Loaded</b></span>'
+            f'Profile: <b>None</b> | Provider: <b>{active_provider}</b> | Status: <span style="color:red;"><b>Not Loaded</b></span>'
         )
         status_bar.addPermanentWidget(self.status_message)
 
@@ -352,6 +379,26 @@ class MainWindow(QMainWindow):
         settings. Any errors that occur will be handled and displayed to the user.
         """
 
+        active_provider = self.provider_combo_box.currentText()
+        provider_cfg = self.config.get("providers", {}).get(active_provider, {})
+
+        if provider_cfg.get("requires_api_key", False) and not provider_cfg.get("api_key", "").strip():
+            msg_box = QMessageBox(
+                QMessageBox.Icon.Warning,
+                "API Key Required",
+                f"The provider '{active_provider}' requires an API key to function.\n\n"
+                "Would you like to configure your API key now?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                self,
+            )
+            if msg_box.exec() == QMessageBox.StandardButton.Yes:
+                self.open_provider_settings()
+                provider_cfg = self.config.get("providers", {}).get(active_provider, {})
+                if not provider_cfg.get("api_key", "").strip():
+                    return
+            else:
+                return
+
         self.language = self.language_dict[
             self.language_combo_box.currentText()
         ]
@@ -370,6 +417,7 @@ class MainWindow(QMainWindow):
                     f"AIna-prompt-{self.language}-{self.language_level}.txt",
                     "prompts",
                 ),
+                provider_config=provider_cfg,
             )
         except Exception as e:
             # Showing the error to the user
@@ -748,15 +796,41 @@ class MainWindow(QMainWindow):
             status (str): Represents the state of the profile. It varies between
                        "Idle" and "Busy".
         """
+        provider_name = self.config.get("active_provider", "LM Studio (Local)")
 
         if status == "Busy":
             self.status_message.setText(
-                f"Profile: <b>AIna-{self.language}-{self.language_level}</b> | Status: <b>Busy</b>"
+                f"Profile: <b>AIna-{self.language}-{self.language_level}</b> | Provider: <b>{provider_name}</b> | Status: <b>Busy</b>"
             )
         else:
             self.status_message.setText(
-                f"Profile: <b>AIna-{self.language}-{self.language_level}</b> | Status: <b>Idle</b>"
+                f"Profile: <b>AIna-{self.language}-{self.language_level}</b> | Provider: <b>{provider_name}</b> | Status: <b>Idle</b>"
             )
+
+    def _on_provider_changed(self, provider_name: str) -> None:
+        """
+        Handles changing the active provider from the sidebar dropdown.
+        """
+        self.config["active_provider"] = provider_name
+        self.save_config()
+        if self.AIna is not None:
+            self.change_status("Idle")
+        else:
+            self.status_message.setText(
+                f'Profile: <b>None</b> | Provider: <b>{provider_name}</b> | Status: <span style="color:red;"><b>Not Loaded</b></span>'
+            )
+
+    def open_provider_settings(self) -> None:
+        """
+        Opens the dialog to configure LLM providers, credentials, and models.
+        """
+        dialog = ProviderSettingsDialog(self.config, CONFIG_PATH, self)
+        if dialog.exec():
+            active = self.config.get("active_provider", "LM Studio (Local)")
+            idx = self.provider_combo_box.findText(active, Qt.MatchFixedString)
+            if idx >= 0:
+                self.provider_combo_box.setCurrentIndex(idx)
+            self._on_provider_changed(active)
 
     def save_config(self) -> None:
         """
@@ -770,6 +844,7 @@ class MainWindow(QMainWindow):
             self.language_level_combo_box.currentText()
         )
         self.config["auto_send"] = self.auto_send_checkbox.isChecked()
+        self.config["active_provider"] = self.provider_combo_box.currentText()
 
         save_config(self.config, CONFIG_PATH)
 
