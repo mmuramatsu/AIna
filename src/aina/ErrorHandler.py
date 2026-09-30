@@ -10,16 +10,10 @@ class ErrorHandler:
     """
 
     @staticmethod
-    def handle_exception(message: dict, error_status: int) -> None:
+    def _format_error_message(message: dict, error_status: int) -> str:
         """
-        Displays an error message using QMessageBox based on the given status
-        code and exception details.
-
-        Args:
-            message (dict): The original exception data or message payload.
-            error_status (int): The numeric code identifying the type of error.
+        Formats the error message string with user-friendly diagnostics and hints.
         """
-
         error_message = {
             1: (
                 "An error occurred while communicating with the GPT model. This"
@@ -64,7 +58,19 @@ class ErrorHandler:
                 extra_hint = "\n\nTip: Provider quota or rate limit exceeded."
 
         base_msg = error_message.get(error_status, 'An unexpected error occurred.\n\nDetails: "')
-        dialog_text = base_msg + err_str + '"' + extra_hint
+        return base_msg + err_str + '"' + extra_hint
+
+    @staticmethod
+    def handle_exception(message: dict, error_status: int) -> None:
+        """
+        Displays an error message using QMessageBox based on the given status
+        code and exception details.
+
+        Args:
+            message (dict): The original exception data or message payload.
+            error_status (int): The numeric code identifying the type of error.
+        """
+        dialog_text = ErrorHandler._format_error_message(message, error_status)
 
         # Displays an error message in a popup dialog.
         msg_box = QMessageBox()
@@ -72,3 +78,33 @@ class ErrorHandler:
         msg_box.setWindowTitle("Error code " + str(hex(error_status)))
         msg_box.setText(dialog_text)
         msg_box.exec()
+
+    @staticmethod
+    def handle_retryable_exception(
+        message: dict, error_status: int, parent=None
+    ) -> bool:
+        """
+        Displays an error message using QMessageBox with 'Retry' and 'Cancel' buttons.
+
+        Args:
+            message (dict): The original exception data or message payload.
+            error_status (int): The numeric code identifying the type of error.
+            parent (QWidget, optional): Parent widget for the message box.
+
+        Returns:
+            bool: True if the user clicked 'Retry', False if 'Cancel' or closed.
+        """
+        dialog_text = ErrorHandler._format_error_message(message, error_status)
+
+        msg_box = QMessageBox(parent)
+        msg_box.setIcon(QMessageBox.Icon.Critical)
+        msg_box.setWindowTitle("Error code " + str(hex(error_status)))
+        msg_box.setText(dialog_text)
+        retry_button = msg_box.addButton(
+            "Retry", QMessageBox.ButtonRole.AcceptRole
+        )
+        msg_box.addButton(QMessageBox.StandardButton.Cancel)
+        msg_box.setDefaultButton(retry_button)
+        msg_box.exec()
+
+        return msg_box.clickedButton() == retry_button
