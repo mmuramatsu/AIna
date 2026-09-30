@@ -48,11 +48,27 @@ class ErrorHandler:
             ),
         }
 
-        message = error_message[error_status] + str(message["error"]) + '"'
+        err = message.get("error")
+        err_str = str(err) if err is not None else ""
+
+        # Provide actionable context for common LLM provider connection failures
+        extra_hint = ""
+        if error_status == 1:
+            if any(term in err_str for term in ("Connection refused", "Failed to connect", "ConnectError")):
+                extra_hint = "\n\nTip: If you are using a local provider (LM Studio or Ollama), verify that the local server is running."
+            elif any(term in err_str for term in ("401", "Incorrect API key", "AuthenticationError")):
+                extra_hint = "\n\nTip: Authentication failed. Please verify your API key in Settings -> LLM Providers."
+            elif any(term in err_str for term in ("404", "NotFoundError")):
+                extra_hint = "\n\nTip: The specified model was not found. Please verify the model name in Settings -> LLM Providers."
+            elif any(term in err_str for term in ("429", "RateLimitError")):
+                extra_hint = "\n\nTip: Provider quota or rate limit exceeded."
+
+        base_msg = error_message.get(error_status, 'An unexpected error occurred.\n\nDetails: "')
+        dialog_text = base_msg + err_str + '"' + extra_hint
 
         # Displays an error message in a popup dialog.
         msg_box = QMessageBox()
         msg_box.setIcon(QMessageBox.Icon.Critical)
         msg_box.setWindowTitle("Error code " + str(hex(error_status)))
-        msg_box.setText(message)
+        msg_box.setText(dialog_text)
         msg_box.exec()
