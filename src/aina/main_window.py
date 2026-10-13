@@ -500,11 +500,29 @@ class MainWindow(QMainWindow):
 
     def new_conversation(self) -> None:
         """
-        Resets the conversation: clears the chat log, deletes the current AIna session,
-        resets flags, disables Repeat button, and readies the UI for the next message.
+        Resets the conversation: prompts for confirmation if a conversation is active,
+        clears the chat log, deletes the current AIna session, resets flags,
+        disables Repeat button, and readies the UI for the next message.
         """
         if self.is_processing:
             return
+
+        has_active_chat = (
+            (self.AIna is not None and self.AIna.has_conversation)
+            or bool(self.log_text_edit.toPlainText().strip())
+        )
+
+        if has_active_chat:
+            reply = QMessageBox.question(
+                self,
+                "New Conversation",
+                "Are you sure you want to start a new conversation?\n\n"
+                "The current conversation history will be cleared.",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No,
+            )
+            if reply != QMessageBox.StandardButton.Yes:
+                return
 
         self.AIna = None
         self.last_user_message = None

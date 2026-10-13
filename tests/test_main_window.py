@@ -195,13 +195,55 @@ def test_new_conversation_resets_state(qtbot, tmp_config, project_root: Path):
     win.last_user_message = "Remember this"
     win.log_text_edit.setText("Some conversation text")
 
-    win.new_conversation_button.click()
+    with patch.object(QMessageBox, "question", return_value=QMessageBox.StandardButton.Yes) as mock_q:
+        win.new_conversation_button.click()
+        mock_q.assert_called_once()
 
     assert win.AIna is None
     assert win.has_reply is False
     assert win.repeat_button.isEnabled() is False
     assert win.last_user_message is None
     assert win.log_text_edit.toPlainText() == ""
+    assert "Status: <b>Ready</b>" in win.status_message.text()
+
+
+def test_new_conversation_cancelled(qtbot, tmp_config, project_root: Path):
+    cfg, cfg_file = tmp_config
+    win = MainWindow(cfg, config_path=cfg_file)
+    qtbot.addWidget(win)
+
+    prompt_path = project_root / "assets" / "prompts" / "AIna-prompt-en-US-Basic.txt"
+    win.AIna = AIna(prompt_path=str(prompt_path))
+    win.has_reply = True
+    win.repeat_button.setEnabled(True)
+    win.last_user_message = "Remember this"
+    win.log_text_edit.setText("Some conversation text")
+
+    with patch.object(QMessageBox, "question", return_value=QMessageBox.StandardButton.No) as mock_q:
+        win.new_conversation_button.click()
+        mock_q.assert_called_once()
+
+    # Conversation remains intact
+    assert win.AIna is not None
+    assert win.has_reply is True
+    assert win.repeat_button.isEnabled() is True
+    assert win.last_user_message == "Remember this"
+    assert win.log_text_edit.toPlainText() == "Some conversation text"
+
+
+def test_new_conversation_without_active_chat_skips_dialog(qtbot, tmp_config):
+    cfg, cfg_file = tmp_config
+    win = MainWindow(cfg, config_path=cfg_file)
+    qtbot.addWidget(win)
+
+    assert win.AIna is None
+    assert win.log_text_edit.toPlainText() == ""
+
+    with patch.object(QMessageBox, "question") as mock_q:
+        win.new_conversation_button.click()
+        mock_q.assert_not_called()
+
+    assert win.AIna is None
     assert "Status: <b>Ready</b>" in win.status_message.text()
 
 
@@ -214,7 +256,8 @@ def test_ctrl_n_triggers_new_conversation(qtbot, tmp_config, project_root: Path)
     win.AIna = AIna(prompt_path=str(prompt_path))
     win.log_text_edit.setText("Chatting...")
 
-    win.new_conversation_action.trigger()
+    with patch.object(QMessageBox, "question", return_value=QMessageBox.StandardButton.Yes):
+        win.new_conversation_action.trigger()
 
     assert win.AIna is None
     assert win.log_text_edit.toPlainText() == ""
