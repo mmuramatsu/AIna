@@ -21,7 +21,7 @@ from PySide6.QtWidgets import (
     QStatusBar,
     QMessageBox,
 )
-from PySide6.QtGui import QPixmap, QTextCursor, QAction, QKeyEvent
+from PySide6.QtGui import QPixmap, QTextCursor, QAction, QKeyEvent, QKeySequence
 from PySide6.QtCore import Qt, Signal, SIGNAL
 import qdarktheme
 import wavio
@@ -92,6 +92,13 @@ class MainWindow(QMainWindow):
         self.setMinimumSize(950, 580)
 
         self.language_dict = {"English": "en-US", "日本語": "ja"}
+        self.language = self.language_dict.get(
+            self.config.get("language", "English"), "en-US"
+        )
+        self.language_level = self.config.get("language_level", "Basic")
+        self.auto_send = self.config.get("auto_send", False)
+        self.AIna = None
+        self.has_reply = False
 
         os.environ["AINA_BASE_DIR"] = BASE_DIR
 
@@ -121,6 +128,7 @@ class MainWindow(QMainWindow):
             self.config["language"], Qt.MatchFixedString
         )
         self.language_combo_box.setCurrentIndex(index)
+        self.language_combo_box.currentTextChanged.connect(self._on_profile_changed)
 
         # Create and populate the QComboBox
         self.language_level_combo_box = QComboBox()
@@ -132,6 +140,7 @@ class MainWindow(QMainWindow):
             self.config["language_level"], Qt.MatchFixedString
         )
         self.language_level_combo_box.setCurrentIndex(index)
+        self.language_level_combo_box.currentTextChanged.connect(self._on_profile_changed)
 
         # Add the QComboBox to the form layout with a label
         config_layout.addRow("Select Language:", self.language_combo_box)
@@ -163,13 +172,14 @@ class MainWindow(QMainWindow):
             "Automatically send the transcribed audio message"
         )
         self.auto_send_checkbox.setChecked(self.config["auto_send"])
+        self.auto_send_checkbox.toggled.connect(self._on_auto_send_toggled)
         config_layout.addRow(self.auto_send_checkbox)
 
-        # Create the Initialize button
-        self.initialize_button = QPushButton("Initialize AIna")
-        self.initialize_button.pressed.connect(self.initialize_model)
-        self.initialize_button.setToolTip("Initialize AIna's profile")
-        config_layout.addRow(self.initialize_button)
+        # Create the New Conversation button
+        self.new_conversation_button = QPushButton("New Conversation")
+        self.new_conversation_button.clicked.connect(self.new_conversation)
+        self.new_conversation_button.setToolTip("Start a new conversation (Ctrl+N)")
+        config_layout.addRow(self.new_conversation_button)
 
         # Create the configuration frame and set its properties
         config_frame = QFrame()
@@ -190,7 +200,7 @@ class MainWindow(QMainWindow):
         self.record_button.setToolTip(
             "Hold to record an audio to transcribe to text"
         )
-        self.record_button.setEnabled(False)
+        self.record_button.setEnabled(True)
 
         # Input field and send button
         self.input_field = StylishLineEdit("Your message")
@@ -255,6 +265,13 @@ class MainWindow(QMainWindow):
         # Create the menu bar
         menu_bar = self.menuBar()
 
+        # Add "File" menu
+        file_menu = menu_bar.addMenu("File")
+        self.new_conversation_action = QAction("New Conversation", self)
+        self.new_conversation_action.setShortcut(QKeySequence.StandardKey.New)
+        self.new_conversation_action.triggered.connect(self.new_conversation)
+        file_menu.addAction(self.new_conversation_action)
+
         # Add "View" menu
         view_menu = menu_bar.addMenu("View")
 
@@ -281,9 +298,9 @@ class MainWindow(QMainWindow):
         self.setStatusBar(status_bar)
 
         self.status_message = QLabel()
-        active_provider = self.config.get("active_provider", "None")
+        active_provider = self.config.get("active_provider", "LM Studio (Local)")
         self.status_message.setText(
-            f'Profile: <b>None</b> | Provider: <b>{active_provider}</b> | Status: <span style="color:red;"><b>Not Loaded</b></span>'
+            f"Profile: <b>AIna-{self.language}-{self.language_level}</b> | Provider: <b>{active_provider}</b> | Status: <b>Ready</b>"
         )
         status_bar.addPermanentWidget(self.status_message)
 
@@ -300,13 +317,6 @@ class MainWindow(QMainWindow):
         self.recording = False
         self.frames = []
 
-        self.language = self.language_dict.get(
-            self.config.get("language", "English"), "en-US"
-        )
-        self.language_level = self.config.get("language_level", "Basic")
-        self.auto_send = self.config.get("auto_send", False)
-        self.AIna = None
-
         # Thread references
         self.speech_thread = None
         self.gpt_thread = None
@@ -316,6 +326,8 @@ class MainWindow(QMainWindow):
         self.is_processing = False
         self.log_add_flag = False
         self.last_user_message = None
+
+        self._update_log_placeholder()
 
         self.current_theme = None
         self.toggle_theme(self.config["theme"], save=False)
@@ -383,61 +395,125 @@ class MainWindow(QMainWindow):
             if save:
                 self.save_config()
 
-    def initialize_model(self) -> None:
+    def _update_log_placeholder(self) -> None:
         """
-        Initialize the AIna profile based on the selected language and level
-        settings. Any errors that occur will be handled and displayed to the user.
+        Sets placeholder text in the log explaining how to start chatting.
         """
+        if self.language == "ja":
+            self.log_text_edit.setPlaceholderText("AInaに話しかけて、会話を始めましょう！")
+        else:
+            self.log_text_edit.setPlaceholderText("Say hi to AIna to start a conversation!")
 
-        active_provider = self.provider_combo_box.currentText()
-        provider_cfg = self.config.get("providers", {}).get(active_provider, {})
+    def _on_auto_send_toggled(self, checked: bool) -> None:
+        """
+        Updates auto_send flag and persists to config.
+        """
+        self.auto_send = checked
+        self.config["auto_send"] = checked
+        self.save_config()
 
+    def _ensure_api_key(self, provider_name: str) -> bool:
+        """
+        Checks if provider requires an API key and prompts the user if missing.
+        Returns True if ready to proceed, False if aborted.
+        """
+        provider_cfg = self.config.get("providers", {}).get(provider_name, {})
         if provider_cfg.get("requires_api_key", False) and not provider_cfg.get("api_key", "").strip():
             msg_box = QMessageBox(
                 QMessageBox.Icon.Warning,
                 "API Key Required",
-                f"The provider '{active_provider}' requires an API key to function.\n\n"
+                f"The provider '{provider_name}' requires an API key to function.\n\n"
                 "Would you like to configure your API key now?",
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
                 self,
             )
             if msg_box.exec() == QMessageBox.StandardButton.Yes:
                 self.open_provider_settings()
-                provider_cfg = self.config.get("providers", {}).get(active_provider, {})
+                provider_cfg = self.config.get("providers", {}).get(provider_name, {})
                 if not provider_cfg.get("api_key", "").strip():
-                    return
+                    return False
             else:
-                return
+                return False
+        return True
 
-        self.language = self.language_dict[
-            self.language_combo_box.currentText()
-        ]
-        self.language_level = self.language_level_combo_box.currentText()
-        self.auto_send = self.auto_send_checkbox.isChecked()
+    def _ensure_session(self) -> bool:
+        """
+        Ensures that an AIna session exists. If not, initializes one lazily.
+        Returns True if session is ready, False if initialization failed or aborted.
+        """
+        active_provider = self.provider_combo_box.currentText()
+        if not self._ensure_api_key(active_provider):
+            return False
 
-        self.log_text_edit.setText("")
+        if self.AIna is not None:
+            return True
 
-        error = False
+        provider_cfg = self.config.get("providers", {}).get(active_provider, {})
+        prompt_filename = f"AIna-prompt-{self.language}-{self.language_level}.txt"
+        prompt_path = get_asset_path(prompt_filename, "prompts")
 
         try:
             self.AIna = AIna(
-                self.language,
-                self.language_level,
-                get_asset_path(
-                    f"AIna-prompt-{self.language}-{self.language_level}.txt",
-                    "prompts",
-                ),
+                language=self.language,
+                language_level=self.language_level,
+                prompt_path=prompt_path,
                 provider_config=provider_cfg,
             )
         except Exception as e:
-            # Showing the error to the user
             ErrorHandler.handle_exception({"error": e}, 5)
-            error = True
+            return False
 
-        if not error:
-            self.save_config()
+        self.change_status("Idle")
+        return True
+
+    def _on_profile_changed(self) -> None:
+        """
+        Handles changes to language or language level dropdowns.
+        If a session exists and has a conversation, hot-swaps the prompt and
+        appends a transition divider to the log.
+        """
+        old_lang = self.language
+        old_level = self.language_level
+
+        self.language = self.language_dict.get(
+            self.language_combo_box.currentText(), "en-US"
+        )
+        self.language_level = self.language_level_combo_box.currentText()
+        self.save_config()
+        self._update_log_placeholder()
+
+        if self.AIna is not None:
+            prompt_filename = f"AIna-prompt-{self.language}-{self.language_level}.txt"
+            prompt_path = get_asset_path(prompt_filename, "prompts")
+            had_conversation = self.AIna.has_conversation
+            self.AIna.set_profile(self.language, self.language_level, prompt_path)
+
+            if had_conversation and (old_lang != self.language or old_level != self.language_level):
+                lang_display = self.language_combo_box.currentText()
+                self.log_text_edit.append(
+                    f"— Switched to {lang_display} · {self.language_level} —\n"
+                )
+
             self.change_status("Idle")
-            self.process_message(self.AIna)
+        else:
+            self.change_status("Ready")
+
+    def new_conversation(self) -> None:
+        """
+        Resets the conversation: clears the chat log, deletes the current AIna session,
+        resets flags, disables Repeat button, and readies the UI for the next message.
+        """
+        if self.is_processing:
+            return
+
+        self.AIna = None
+        self.last_user_message = None
+        self.has_reply = False
+        self.log_text_edit.clear()
+        self._update_log_placeholder()
+        self.repeat_button.setEnabled(False)
+        self.change_status("Ready")
+        self.input_field.setFocus()
 
     def _callback(self, indata, frames, time, status):
         """
@@ -641,9 +717,10 @@ class MainWindow(QMainWindow):
             self.last_user_message = None  # Clear on success
             if message["content"] != "":
                 self.AIna.history.append(message)
+                self.has_reply = True
 
                 self.erase_log()
-                self.log_text_edit.append(f"AIna: {message["content"]}\n")
+                self.log_text_edit.append(f"AIna: {message['content']}\n")
 
                 self.play_sound()
 
@@ -697,41 +774,46 @@ class MainWindow(QMainWindow):
 
     def enable_all_buttons(self) -> None:
         """
-        Enables all buttons in the interface.
-        Only enables interaction buttons if the model has been initialized.
+        Enables all buttons and controls in the interface when idle.
         """
+        self.new_conversation_button.setEnabled(True)
+        if hasattr(self, "new_conversation_action"):
+            self.new_conversation_action.setEnabled(True)
+        self.language_combo_box.setEnabled(True)
+        self.language_level_combo_box.setEnabled(True)
+        self.provider_combo_box.setEnabled(True)
+        self.configure_provider_button.setEnabled(True)
+        self.record_button.setEnabled(True)
+        self.repeat_button.setEnabled(self.has_reply)
 
-        self.initialize_button.setEnabled(True)
-
-        # Only enable interaction buttons if profile is initialized
-        if self.AIna is not None:
-            self.record_button.setEnabled(True)
-            self.repeat_button.setEnabled(True)
-
-            # If there is text in the input_field, enable it
-            if self.input_field.text() != "":
-                self.send_button.setEnabled(True)
+        if bool(self.input_field.text().strip()):
+            self.send_button.setEnabled(True)
 
     def disable_all_buttons(self) -> None:
         """
-        Disables all buttons in the interface.
+        Disables controls in the interface during background processing.
         """
-
         self.record_button.setEnabled(False)
-        self.initialize_button.setEnabled(False)
         self.send_button.setEnabled(False)
         self.repeat_button.setEnabled(False)
+        self.new_conversation_button.setEnabled(False)
+        if hasattr(self, "new_conversation_action"):
+            self.new_conversation_action.setEnabled(False)
+        self.language_combo_box.setEnabled(False)
+        self.language_level_combo_box.setEnabled(False)
+        self.provider_combo_box.setEnabled(False)
+        self.configure_provider_button.setEnabled(False)
 
     def send_message(self) -> None:
         """
-        Sends a message to the model to be processed.
+        Sends a message to the model to be processed. Initializes the AIna session
+        lazily if not already created.
         """
-
-        if self.AIna is None:
-            return
-
         message = self.input_field.text().strip()
         if not message:
+            return
+
+        if not self._ensure_session():
             return
 
         self.last_user_message = message
@@ -820,14 +902,12 @@ class MainWindow(QMainWindow):
 
     def toggle_button_state(self, text: str) -> None:
         """
-        Enable the button if there's text; otherwise, disable it.
+        Enable the send button if there's text and not currently processing.
 
         Args:
             text (str): text in the EditLine.
         """
-
-        # Enable the button only if there's a profile loaded and is not processing something
-        if self.AIna is not None and not self.is_processing:
+        if not self.is_processing:
             self.send_button.setEnabled(bool(text.strip()))
 
     def handle_repeat_button(self) -> None:
@@ -868,11 +948,10 @@ class MainWindow(QMainWindow):
 
     def change_status(self, status: str) -> None:
         """
-        Change the status of the profile.
+        Change the status displayed in the status bar.
 
         Args:
-            status (str): Represents the state of the profile. It varies between
-                       "Idle" and "Busy".
+            status (str): Represents the state of the profile ('Ready', 'Idle', 'Busy').
         """
         provider_name = self.config.get("active_provider", "LM Studio (Local)")
 
@@ -880,23 +959,28 @@ class MainWindow(QMainWindow):
             self.status_message.setText(
                 f"Profile: <b>AIna-{self.language}-{self.language_level}</b> | Provider: <b>{provider_name}</b> | Status: <b>Busy</b>"
             )
-        else:
+        elif status == "Idle":
             self.status_message.setText(
                 f"Profile: <b>AIna-{self.language}-{self.language_level}</b> | Provider: <b>{provider_name}</b> | Status: <b>Idle</b>"
+            )
+        else:
+            self.status_message.setText(
+                f"Profile: <b>AIna-{self.language}-{self.language_level}</b> | Provider: <b>{provider_name}</b> | Status: <b>Ready</b>"
             )
 
     def _on_provider_changed(self, provider_name: str) -> None:
         """
         Handles changing the active provider from the sidebar dropdown.
+        Hot-swaps the provider client on an existing session while preserving history.
         """
         self.config["active_provider"] = provider_name
         self.save_config()
         if self.AIna is not None:
+            provider_cfg = self.config.get("providers", {}).get(provider_name, {})
+            self.AIna.set_provider(provider_cfg)
             self.change_status("Idle")
         else:
-            self.status_message.setText(
-                f'Profile: <b>None</b> | Provider: <b>{provider_name}</b> | Status: <span style="color:red;"><b>Not Loaded</b></span>'
-            )
+            self.change_status("Ready")
 
     def open_provider_settings(self) -> None:
         """
