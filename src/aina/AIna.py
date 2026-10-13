@@ -14,6 +14,9 @@ class AIna:
     # This prevents unbounded history growth that would hit token limits.
     MAX_HISTORY_MESSAGES = 50
 
+    # Human-readable language names used in the profile transition note.
+    LANGUAGE_NAMES = {"en-US": "English", "ja": "Japanese"}
+
     def __init__(
         self,
         language: str = "en-US",
@@ -24,6 +27,9 @@ class AIna:
         """
         Initializes the GPT model by loading the prompt, setting up conversation history,
         and creating the API client for communication.
+
+        The history starts with the system prompt only, so the user is the one
+        who starts the conversation.
 
         Args:
             language (str, optional): The language used for communication with the model,
@@ -38,26 +44,80 @@ class AIna:
         self.language = language
         self.language_level = language_level
 
-        filename = prompt_path
-
-        # Loading prompt
-        with open(filename, "r", encoding="utf-8") as file:
-            text = file.read()
-
-        self.init_messages = {
-            "en-US": [text, "Greet your new speaker and start a conversation."],
-            "ja": [
-                text,
-                "あなたの新しいスピーカーに挨拶して、会話を始めましょう。",
-            ],
-        }
-
         self.history = [
-            {"role": "system", "content": self.init_messages[language][0]},
-            {"role": "user", "content": self.init_messages[language][1]},
+            {"role": "system", "content": self._load_prompt(prompt_path)},
         ]
 
-        # Configure provider credentials and model
+        self.set_provider(provider_config)
+
+    @staticmethod
+    def _load_prompt(prompt_path: str) -> str:
+        """
+        Reads the system prompt from disk.
+
+        Args:
+            prompt_path (str): Path to the prompt file.
+
+        Returns:
+            str: The prompt text.
+        """
+
+        with open(prompt_path, "r", encoding="utf-8") as file:
+            return file.read()
+
+    @property
+    def has_conversation(self) -> bool:
+        """
+        Whether at least one message was exchanged after the system prompt.
+        """
+
+        return len(self.history) > 1
+
+    def set_profile(
+        self, language: str, language_level: str, prompt_path: str
+    ) -> None:
+        """
+        Replaces the system prompt with a new language/level profile.
+
+        The Chat Completions API is stateless, so swapping the system prompt
+        mid-conversation is safe. If a conversation is already in progress, a
+        transition note is appended to the system prompt so the model knows the
+        earlier messages used a different profile. The prompt is rebuilt from
+        disk each time, so notes never stack up.
+
+        Args:
+            language (str): The new language code, e.g., 'en-US' or 'ja'.
+            language_level (str): The new proficiency level, e.g., 'Basic'.
+            prompt_path (str): Path to the prompt file of the new profile.
+        """
+
+        content = self._load_prompt(prompt_path)
+
+        if self.has_conversation:
+            old_name = self.LANGUAGE_NAMES.get(self.language, self.language)
+            new_name = self.LANGUAGE_NAMES.get(language, language)
+            content += (
+                f"\n\nNote: earlier messages in this conversation were in "
+                f"{old_name} ({self.language_level}). From now on, continue the "
+                f"conversation in {new_name} at the {language_level} level, "
+                f"following the instructions above."
+            )
+
+        self.history[0] = {"role": "system", "content": content}
+        self.language = language
+        self.language_level = language_level
+
+    def set_provider(self, provider_config: dict | None) -> None:
+        """
+        (Re)creates the API client and model name from a provider configuration.
+
+        The conversation history is left untouched, so the provider can be
+        switched mid-conversation.
+
+        Args:
+            provider_config (dict, optional): Provider settings containing base_url, api_key, and model.
+        """
+
         config = provider_config or {}
         base_url = config.get("base_url") or "http://localhost:1234/v1"
         api_key = config.get("api_key") or "none"
