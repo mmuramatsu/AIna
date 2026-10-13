@@ -53,9 +53,9 @@ AIna is an artificial conversationalist designed to bring joy, warmth, and depth
     python main.py
     ```
 
-3.  **Configure AIna:** In the application, select your desired language and language level, and then click the "Initialize AIna" button.
+3.  **Start chatting!** Select your desired language and level (or switch them anytime mid-conversation), choose your LLM provider, and simply type or speak your first message. AIna starts communicating immediately.
 
-4.  **Start chatting!** You can now start a conversation with AIna by typing or holding the microphone button to speak.
+4.  **New Conversation:** Click "New Conversation" in the sidebar or press `Ctrl+N` anytime to clear the chat and start a fresh session.
 
 ### Standalone Executable
 
