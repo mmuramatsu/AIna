@@ -11,12 +11,56 @@ def test_main_window_init(qtbot, tmp_config):
     win = MainWindow(cfg, config_path=cfg_file)
     qtbot.addWidget(win)
 
-    assert win.initialize_button is not None
-    assert win.record_button is not None
-    assert win.send_button is not None
-    assert win.provider_combo_box is not None
-    assert "Profile: <b>None</b>" in win.status_message.text()
+    assert win.new_conversation_button is not None
+    assert win.new_conversation_action is not None
+    assert win.AIna is None
+    assert win.record_button.isEnabled() is True
+    assert win.send_button.isEnabled() is False
+    assert win.repeat_button.isEnabled() is False
+    assert "Profile: <b>AIna-en-US-Basic</b>" in win.status_message.text()
+    assert "Status: <b>Ready</b>" in win.status_message.text()
     assert "LM Studio (Local)" in win.status_message.text()
+    assert "Say hi to AIna" in win.log_text_edit.placeholderText()
+
+
+def test_first_message_creates_session(qtbot, tmp_config, project_root: Path):
+    cfg, cfg_file = tmp_config
+    win = MainWindow(cfg, config_path=cfg_file)
+    qtbot.addWidget(win)
+
+    assert win.AIna is None
+
+    win.input_field.setText("Hello AIna")
+    assert win.send_button.isEnabled() is True
+
+    with patch.object(win, "process_message") as mock_process:
+        win.send_message()
+
+        assert win.AIna is not None
+        assert win.AIna.language == "en-US"
+        assert len(win.AIna.history) == 2
+        assert win.AIna.history[1]["content"] == "Hello AIna"
+        assert "You: Hello AIna" in win.log_text_edit.toPlainText()
+        assert win.input_field.text() == ""
+        assert "Status: <b>Idle</b>" in win.status_message.text()
+        mock_process.assert_called_once()
+
+
+def test_first_message_missing_api_key_declined(qtbot, tmp_config):
+    cfg, cfg_file = tmp_config
+    win = MainWindow(cfg, config_path=cfg_file)
+    qtbot.addWidget(win)
+
+    # Switch to cloud provider with missing API key
+    win.provider_combo_box.setCurrentText("OpenAI (Cloud)")
+    win.input_field.setText("My unsent message")
+
+    with patch.object(QMessageBox, "exec", return_value=QMessageBox.StandardButton.No):
+        win.send_message()
+
+    # Session was not created, input field text was preserved
+    assert win.AIna is None
+    assert win.input_field.text() == "My unsent message"
 
 
 def test_main_window_send_message_dispatches(qtbot, tmp_config, project_root: Path):
@@ -24,7 +68,7 @@ def test_main_window_send_message_dispatches(qtbot, tmp_config, project_root: Pa
     win = MainWindow(cfg, config_path=cfg_file)
     qtbot.addWidget(win)
 
-    # Initialize mock profile
+    # Pre-existing session
     prompt_path = project_root / "assets" / "prompts" / "AIna-prompt-en-US-Basic.txt"
     win.AIna = AIna(prompt_path=str(prompt_path))
 
@@ -86,17 +130,120 @@ def test_main_window_error_retry_flow(qtbot, tmp_config, project_root: Path):
         mock_resend.assert_called_once()
 
 
-def test_main_window_provider_change_updates_status_bar(qtbot, tmp_config):
+def test_language_change_mid_conversation(qtbot, tmp_config, project_root: Path):
     cfg, cfg_file = tmp_config
     win = MainWindow(cfg, config_path=cfg_file)
     qtbot.addWidget(win)
 
-    assert "LM Studio (Local)" in win.status_message.text()
+    prompt_path = project_root / "assets" / "prompts" / "AIna-prompt-en-US-Basic.txt"
+    win.AIna = AIna(prompt_path=str(prompt_path))
+    win.AIna.history.append({"role": "user", "content": "Hello"})
+    win.AIna.history.append({"role": "assistant", "content": "Hi!"})
 
-    # Change combo box to Ollama (Local)
+    win.language_combo_box.setCurrentText("日本語")
+
+    assert win.language == "ja"
+    assert win.AIna.language == "ja"
+    assert "Switched to 日本語 · Basic" in win.log_text_edit.toPlainText()
+    assert "continue the conversation in Japanese" in win.AIna.history[0]["content"]
+    assert "AIna-ja-Basic" in win.status_message.text()
+
+
+def test_language_change_before_conversation(qtbot, tmp_config):
+    cfg, cfg_file = tmp_config
+    win = MainWindow(cfg, config_path=cfg_file)
+    qtbot.addWidget(win)
+
+    win.language_combo_box.setCurrentText("日本語")
+
+    assert win.language == "ja"
+    assert win.AIna is None
+    assert "Switched to" not in win.log_text_edit.toPlainText()
+    assert "AInaに話しかけて" in win.log_text_edit.placeholderText()
+    assert "Profile: <b>AIna-ja-Basic</b>" in win.status_message.text()
+    assert "Status: <b>Ready</b>" in win.status_message.text()
+
+
+def test_provider_change_mid_conversation(qtbot, tmp_config, project_root: Path):
+    cfg, cfg_file = tmp_config
+    win = MainWindow(cfg, config_path=cfg_file)
+    qtbot.addWidget(win)
+
+    prompt_path = project_root / "assets" / "prompts" / "AIna-prompt-en-US-Basic.txt"
+    win.AIna = AIna(prompt_path=str(prompt_path))
+    win.AIna.history.append({"role": "user", "content": "Hello"})
+    initial_len = len(win.AIna.history)
+
+    # Switch to Ollama
     win.provider_combo_box.setCurrentText("Ollama (Local)")
+
     assert "Ollama (Local)" in win.status_message.text()
-    assert win.config["active_provider"] == "Ollama (Local)"
+    assert win.AIna.model_name == "llama3.2"
+    assert str(win.AIna.client.base_url).startswith("http://localhost:11434/v1")
+    assert len(win.AIna.history) == initial_len
+
+
+def test_new_conversation_resets_state(qtbot, tmp_config, project_root: Path):
+    cfg, cfg_file = tmp_config
+    win = MainWindow(cfg, config_path=cfg_file)
+    qtbot.addWidget(win)
+
+    prompt_path = project_root / "assets" / "prompts" / "AIna-prompt-en-US-Basic.txt"
+    win.AIna = AIna(prompt_path=str(prompt_path))
+    win.has_reply = True
+    win.repeat_button.setEnabled(True)
+    win.last_user_message = "Remember this"
+    win.log_text_edit.setText("Some conversation text")
+
+    win.new_conversation_button.click()
+
+    assert win.AIna is None
+    assert win.has_reply is False
+    assert win.repeat_button.isEnabled() is False
+    assert win.last_user_message is None
+    assert win.log_text_edit.toPlainText() == ""
+    assert "Status: <b>Ready</b>" in win.status_message.text()
+
+
+def test_ctrl_n_triggers_new_conversation(qtbot, tmp_config, project_root: Path):
+    cfg, cfg_file = tmp_config
+    win = MainWindow(cfg, config_path=cfg_file)
+    qtbot.addWidget(win)
+
+    prompt_path = project_root / "assets" / "prompts" / "AIna-prompt-en-US-Basic.txt"
+    win.AIna = AIna(prompt_path=str(prompt_path))
+    win.log_text_edit.setText("Chatting...")
+
+    win.new_conversation_action.trigger()
+
+    assert win.AIna is None
+    assert win.log_text_edit.toPlainText() == ""
+    assert "Status: <b>Ready</b>" in win.status_message.text()
+
+
+def test_new_conversation_ignored_while_processing(qtbot, tmp_config, project_root: Path):
+    cfg, cfg_file = tmp_config
+    win = MainWindow(cfg, config_path=cfg_file)
+    qtbot.addWidget(win)
+
+    prompt_path = project_root / "assets" / "prompts" / "AIna-prompt-en-US-Basic.txt"
+    win.AIna = AIna(prompt_path=str(prompt_path))
+    win.is_processing = True
+
+    win.new_conversation()
+
+    assert win.AIna is not None
+
+
+def test_auto_send_checkbox_updates_flag(qtbot, tmp_config):
+    cfg, cfg_file = tmp_config
+    win = MainWindow(cfg, config_path=cfg_file)
+    qtbot.addWidget(win)
+
+    assert win.auto_send is False
+    win.auto_send_checkbox.setChecked(True)
+    assert win.auto_send is True
+    assert win.config["auto_send"] is True
 
 
 def test_main_window_config_isolation(qtbot, tmp_path: Path):
